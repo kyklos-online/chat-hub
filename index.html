@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Hub - Screen Sharing</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3b82f6',
+                        secondary: '#1e40af',
+                        dark: '#0f172a',
+                        success: '#10b981'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+        }
+        .chat-container {
+            transition: all 0.3s ease;
+        }
+        .participants-panel {
+            transition: all 0.3s ease;
+        }
+        .message-item {
+            animation: fadeIn 0.3s ease;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .unread-count {
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        .video-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 1rem;
+        }
+        .video-container {
+            position: relative;
+            background-color: #1f2937;
+            border-radius: 0.5rem;
+            overflow: hidden;
+            aspect-ratio: 16/9;
+        }
+        .video-placeholder {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            text-align: center;
+        }
+        .video-placeholder i {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+        .remote-video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .local-video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .participant-badge {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0,0,0,0.7);
+            padding: 0.25rem;
+            font-size: 0.75rem;
+            text-align: center;
+        }
+        .sidebar {
+            transition: transform 0.3s ease;
+        }
+        .camera-disabled-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            color: white;
+            text-align: center;
+            padding: 1rem;
+        }
+        .camera-disabled-overlay i {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+        .login-modal {
+            background: rgba(0, 0, 0, 0.8);
+        }
+        .user-list-item {
+            transition: all 0.2s ease;
+        }
+        .user-list-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .cooldown-message {
+            background-color: #ef4444;
+            color: white;
+            padding: 0.5rem;
+            border-radius: 0.25rem;
+            margin-top: 0.5rem;
+            text-align: center;
+            animation: slideDown 0.3s ease;
+        }
+        @keyframes slideDown {
+            from { transform: translateY(-10px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .screen-share-indicator {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #ef4444;
+            color: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            z-index: 10;
+        }
+        .screen-sharing {
+            position: relative;
+            border: 2px solid #ef4444;
+        }
+        .screen-sharing .video-placeholder {
+            background: linear-gradient(45deg, #1f2937, #374151);
+        }
+        .screen-sharing .screen-share-indicator {
+            display: flex;
+        }
+        .screen-sharing .participant-badge {
+            background: rgba(239, 68, 68, 0.8);
+        }
+        .share-toggle-btn {
+            position: relative;
+            overflow: hidden;
+        }
+        .share-toggle-btn::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(239, 68, 68, 0.3);
+            transform: scaleX(0);
+            transform-origin: left;
+            transition: transform 0.3s ease;
+            pointer-events: none;
+        }
+        .share-toggle-btn:hover::after {
+            transform: scaleX(1);
+        }
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            color: white;
+            text-align: center;
+            padding: 1rem;
+        }
+        .overlay i {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white h-screen flex flex-col">
+    <!-- Header -->
+    <header class="bg-gray-800 py-3 px-6 flex justify-between items-center border-b border-gray-700">
+        <div class="flex items-center space-x-3">
+            <i class="fas fa-comments text-primary text-xl"></i>
+            <h1 class="text-xl font-bold">Chat Hub</h1>
+        </div>
+        <div class="flex items-center space-x-4">
+            <div id="timer" class="bg-gray-700 px-3 py-1 rounded-full text-sm font-mono">
+                00:00:00
+            </div>
+            <div id="roomInfo" class="text-sm text-gray-300">
+                Room: <span id="roomId">-</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="flex-1 flex overflow-hidden">
+        <!-- Participants Panel -->
+        <div id="participantsPanel" class="w-64 bg-gray-800 border-r border-gray-700 flex flex-col participants-panel">
+            <div class="p-4 border-b border-gray-700 flex justify-between items-center">
+                <h2 class="font-semibold">Participants</h2>
+                <button id="closeParticipants" class="text-gray-400 hover:text-white">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="flex-1 overflow-y-auto p-2">
+                <div class="space-y-2">
+                    <div class="flex items-center p-2 bg-gray-700 rounded-lg">
+                        <div class="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center mr-2">
+                            <i class="fas fa-user"></i>
+                        </div>
+                        <div>
+                            <div class="font-medium">You</div>
+                            <div class="text-xs text-gray-400">Active now</div>
+                        </div>
+                        <div class="ml-auto text-xs bg-green-500 text-white px-2 py-1 rounded-full">Online</div>
+                    </div>
+                    <div id="participantList" class="space-y-2">
+                        <!-- Participants will be added here dynamically -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Video Area -->
+        <div class="flex-1 flex flex-col">
+            <!-- Video Grid -->
+            <div id="videoGrid" class="flex-1 video-grid p-4">
+                <div class="video-container" id="localVideoContainer">
+                    <div id="localVideoPlaceholder" class="video-placeholder">
+                        <i class="fas fa-user text-3xl"></i>
+                        <div class="font-medium">You</div>
+                        <div class="text-sm text-gray-400">Camera On</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat Container -->
+            <div id="chatContainer" class="h-64 bg-gray-800 border-t border-gray-700 flex flex-col chat-container">
+                <!-- Chat Header -->
+                <div class="p-3 border-b border-gray-700 flex justify-between items-center">
+                    <h3 class="font-semibold">Public Chat</h3>
+                    <div id="unreadCount" class="text-xs bg-red-500 text-white rounded-full px-2 py-1 unread-count hidden">
+                        0
+                    </div>
+                </div>
+                
+                <!-- Messages -->
+                <div id="messagesContainer" class="flex-1 overflow-y-auto p-3 space-y-2">
+                    <div class="text-center text-gray-500 text-sm py-4">
+                        No messages yet. Type something to start the conversation!
+                    </div>
+                </div>
+                
+                <!-- Input -->
+                <div class="p-3 border-t border-gray-700">
+                    <div class="flex items-center">
+                        <input 
+                            id="messageInput" 
+                            type="text" 
+                            placeholder="Type your message..." 
+                            class="flex-1 bg-gray-700 rounded-l-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary"
+                        >
+                        <button id="sendButton" class="bg-primary hover:bg-secondary px-4 py-2 rounded-r-lg transition">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Controls -->
+        <div class="w-16 bg-gray-800 border-l border-gray-700 flex flex-col items-center py-4 space-y-6">
+            <button id="cameraToggle" class="bg-gray-700 hover:bg-gray-600 p-3 rounded-full transition">
+                <i class="fas fa-video text-xl"></i>
+            </button>
+            <button id="micToggle" class="bg-gray-700 hover:bg-gray-600 p-3 rounded-full transition">
+                <i class="fas fa-microphone text-xl"></i>
+            </button>
+            <button id="shareScreen" class="bg-gray-700 hover:bg-gray-600 p-3 rounded-full transition share-toggle-btn">
+                <i class="fas fa-desktop text-xl"></i>
+            </button>
+            <button id="participantsToggle" class="bg-gray-700 hover:bg-gray-600 p-3 rounded-full transition">
+                <i class="fas fa-users text-xl"></i>
+            </button>
+            <button id="leaveCall" class="bg-red-600 hover:bg-red-700 p-3 rounded-full transition">
+                <i class="fas fa-phone-slash text-xl"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Login Modal -->
+    <div id="loginModal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 login-modal">
+        <div class="bg-gray-800 rounded-lg p-8 w-full max-w-md">
+            <h2 class="text-2xl font-bold mb-6 text-center">Login to Chat Hub</h2>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium mb-1">Email Address</label>
+                    <input 
+                        id="emailInput" 
+                        type="email" 
+                        placeholder="Enter your email" 
+                        class="w-full bg-gray-700 rounded px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary"
+                    >
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1">Display Name</label>
+                    <input 
+                        id="displayNameInput" 
+                        type="text" 
+                        placeholder="Enter your name" 
+                        class="w-full bg-gray-700 rounded px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary"
+                    >
+                </div>
+                <div class="flex space-x-4 pt-4">
+                    <button id="loginBtn" class="flex-1 bg-primary hover:bg-secondary py-3 rounded-lg font-semibold transition">
+                        Login
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Welcome Modal -->
+    <div id="welcomeModal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 hidden">
+        <div class="bg-gray-800 rounded-lg p-8 w-full max-w-md">
+            <h2 class="text-2xl font-bold mb-6 text-center">Welcome to Chat Hub</h2>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium mb-1">Your Display Name</label>
+                    <input 
+                        id="displayNameInput2" 
+                        type="text" 
+                        placeholder="Enter your name" 
+                        class="w-full bg-gray-700 rounded px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary"
+                    >
+                </div>
+                <div class="flex space-x-4 pt-4">
+                    <button id="createRoomBtn" class="flex-1 bg-primary hover:bg-secondary py-3 rounded-lg font-semibold transition">
+                        Create Room
+                    </button>
+                    <button id="joinRoomBtn" class="flex-1 bg-gray-700 hover:bg-gray-600 py-3 rounded-lg font-semibold transition">
+                        Join Room
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let userName = '';
+        let userEmail = '';
+        let currentRoomId = '';
+        let timerInterval = null;
+        let elapsedTime = 0;
+        let participantCounts = {};
+        let unreadMessages = 0;
+        let localStream = null;
+        let remoteStreams = new Map();
+        let mediaPermissionRequested = false;
+        let cameraEnabled = true;
+        let loggedInUsers = [];
+        let lastSentMessageTime = 0;
+        let cooldownPeriod = 2000; // 2 second cooldown
+        let screenSharingActive = false;
+        let screenShareStream = null;
+        let sharingUser = null;
+        let shareButton = document.getElementById('shareScreen');
+
+        // DOM Elements
+        const loginModal = document.getElementById('loginModal');
+        const welcomeModal = document.getElementById('welcomeModal');
+        const emailInput = document.getElementById('emailInput');
+        const displayNameInput = document.getElementById('displayNameInput');
+        const displayNameInput2 = document.getElementById('displayNameInput2');
+        const loginBtn = document.getElementById('loginBtn');
+        const createRoomBtn = document.getElementById('createRoomBtn');
+        const joinRoomBtn = document.getElementById('joinRoomBtn');
+        const cameraToggle = document.getElementById('cameraToggle');
+        const micToggle = document.getElementById('micToggle');
+        const participantsToggle = document.getElementById('participantsToggle');
+        const closeParticipants = document.getElementById('closeParticipants');
+        const participantsPanel = document.getElementById('participantsPanel');
+        const messageInput = document.getElementById('messageInput');
+        const sendButton = document.getElementById('sendButton');
+        const messagesContainer = document.getElementById('messagesContainer');
+        const timerDisplay = document.getElementById('timer');
+        const roomIdDisplay = document.getElementById('roomId');
+        const unreadCount = document.getElementById('unreadCount');
+        const leaveCall = document.getElementById('leaveCall');
+        const participantList = document.getElementById('participantList');
+        const videoGrid = document.getElementById('videoGrid');
+        const localVideoPlaceholder = document.getElementById('localVideoPlaceholder');
+        const localVideoContainer = document.getElementById('localVideoContainer');
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            setupEventListeners();
+            hideParticipantsPanel();
+            setupMediaDevices();
+            // Show login modal on startup
+            loginModal.classList.remove('hidden');
+        });
+
+        async function setupMediaDevices() {
+            try {
+                const constraints = { video: true, audio: true };
+                localStream = await navigator.mediaDevices.getUserMedia(constraints);
+                setupLocalVideo();
+            } catch (err) {
+                console.error("Error accessing media devices:", err);
+            }
+        }
+
+        function setupLocalVideo() {
+            if (!localStream) return;
+            
+            const localVideoElement = document.createElement('video');
+            localVideoElement.srcObject = localStream;
+            localVideoElement.autoplay = true;
+            localVideoElement.muted = true;
+            localVideoElement.playsInline = true;
+            localVideoElement.className = 'local-video';
+            
+            const videoContainer = document.querySelector('.video-container');
+            videoContainer.innerHTML = '';
+            videoContainer.appendChild(localVideoElement);
+        }
+
+        function setupEventListeners() {
+            // Login modal events
+            loginBtn.addEventListener('click', handleLogin);
+            
+            // Welcome modal events
+            createRoomBtn.addEventListener('click', createRoom);
+            joinRoomBtn.addEventListener('click', joinRoom);
+            
+            // Camera toggle - allow it to be toggled
+            cameraToggle.addEventListener('click', toggleCamera);
+            
+            micToggle.addEventListener('click', toggleMicrophone);
+            
+            // Share screen button
+            shareButton.addEventListener('click', toggleScreenShare);
+            
+            // Participants panel
+            participantsToggle.addEventListener('click', toggleParticipantsPanel);
+            closeParticipants.addEventListener('click', hideParticipantsPanel);
+            
+            // Chat events
+            sendButton.addEventListener('click', sendMessage);
+            messageInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') sendMessage();
+            });
+            
+            // Leave call
+            leaveCall.addEventListener('click', leaveCallHandler);
+        }
+
+        function handleLogin() {
+            const email = emailInput.value.trim();
+            const name = displayNameInput.value.trim();
+            
+            if (!email || !name) {
+                alert('Please enter both email and display name');
+                return;
+            }
+            
+            // Simple email validation
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                alert('Please enter a valid email address');
+                return;
+            }
+            
+            // Check if user already exists
+            const existingUser = loggedInUsers.find(user => user.email === email);
+            if (existingUser) {
+                alert('This email is already registered. Please log in with another email.');
+                return;
+            }
+            
+            userEmail = email;
+            userName = name;
+            
+            // Add user to logged-in users array
+            loggedInUsers.push({ email, name });
+            
+            // Hide login modal and show welcome modal
+            loginModal.classList.add('hidden');
+            welcomeModal.classList.remove('hidden');
+        }
+
+        function createRoom() {
+            const name = displayNameInput2.value.trim();
+            if (!name) {
+                alert('Please enter a display name');
+                return;
+            }
+            
+            userName = name;
+            currentRoomId = Math.random().toString(36).substring(2, 10);
+            
+            // Simulate room creation
+            roomIdDisplay.textContent = currentRoomId;
+            welcomeModal.classList.add('hidden');
+            
+            // Start timer
+            startTimer();
+            
+            // Add self to participant list
+            addParticipant(userName, true, true);
+            
+            // Request media permissions if not already done
+            requestMediaPermissions();
+        }
+
+        function joinRoom() {
+            const name = displayNameInput2.value.trim();
+            if (!name) {
+                alert('Please enter a display name');
+                return;
+            }
+            
+            userName = name;
+            currentRoomId = prompt('Enter room ID:');
+            if (!currentRoomId) return;
+            
+            // Simulate joining room
+            roomIdDisplay.textContent = currentRoomId;
+            welcomeModal.classList.add('hidden');
+            
+            // Start timer
+            startTimer();
+            
+            // Add self to participant list
+            addParticipant(userName, true, true);
+            
+            // Request media permissions if not already done
+            requestMediaPermissions();
+        }
+
+        async function requestMediaPermissions() {
+            if (mediaPermissionRequested) return;
+            
+            try {
+                const constraints = { video: true, audio: true };
+                await navigator.mediaDevices.getUserMedia(constraints);
+                mediaPermissionRequested = true;
+            } catch (err) {
+                console.error("Media permission denied:", err);
+            }
+        }
+
+        function addParticipant(name, isSelf = false, isOnline = true) {
+            const existing = document.querySelector(`[data-name="${name}"]`);
+            if (existing) return;
+            
+            const participantDiv = document.createElement('div');
+            participantDiv.className = `flex items-center p-2 rounded-lg ${isSelf ? 'bg-blue-900' : 'bg-gray-700'} ${isOnline ? '' : 'opacity-70'} user-list-item`;
+            participantDiv.dataset.name = name;
+            
+            participantDiv.innerHTML = `
+                <div class="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center mr-2">
+                    <i class="fas fa-user"></i>
+                </div>
+                <div>
+                    <div class="font-medium">${name}</div>
+                    <div class="text-xs text-gray-400">${isOnline ? 'Active now' : 'Offline'}</div>
+                </div>
+                ${isOnline ? '<div class="ml-auto text-xs bg-green-500 text-white px-2 py-1 rounded-full">Online</div>' : ''}
+            `;
+            
+            participantList.appendChild(participantDiv);
+        }
+
+        function enableCamera() {
+            cameraEnabled = true;
+            const icon = cameraToggle.querySelector('i');
+            icon.classList.remove('fa-video-slash');
+            icon.classList.add('fa-video');
+            cameraToggle.classList.remove('bg-red-600');
+            
+            // Show camera is enabled
+            localVideoPlaceholder.innerHTML = `
+                <i class="fas fa-user text-3xl"></i>
+                <div class="font-medium">You</div>
+                <div class="text-sm text-gray-400">Camera On</div>
+            `;
+            
+            // Re-enable camera if needed
+            if (localStream) {
+                const videoTracks = localStream.getVideoTracks();
+                if (videoTracks.length > 0) {
+                    videoTracks[0].enabled = true;
+                }
+            }
+        }
+
+        function disableCamera() {
+            cameraEnabled = false;
+            const icon = cameraToggle.querySelector('i');
+            icon.classList.remove('fa-video');
+            icon.classList.add('fa-video-slash');
+            cameraToggle.classList.add('bg-red-600');
+            
+            // Show camera disabled overlay
+            localVideoPlaceholder.innerHTML = `
+                <i class="fas fa-video-slash text-3xl"></i>
+                <div class="font-medium">Camera Disabled</div>
+                <div class="text-sm text-gray-400">Camera is off</div>
+            `;
+            
+            // Disable camera tracks
+            if (localStream) {
+                const videoTracks = localStream.getVideoTracks();
+                if (videoTracks.length > 0) {
+                    videoTracks[0].enabled = false;
+                }
+            }
+        }
+
+        function toggleCamera() {
+            if (cameraEnabled) {
+                disableCamera();
+            } else {
+                enableCamera();
+            }
+        }
+
+        function toggleMicrophone() {
+            const icon = micToggle.querySelector('i');
+            if (icon.classList.contains('fa-microphone')) {
+                icon.classList.remove('fa-microphone');
+                icon.classList.add('fa-microphone-slash');
+                micToggle.classList.add('bg-red-600');
+            } else {
+                icon.classList.remove('fa-microphone-slash');
+                icon.classList.add('fa-microphone');
+                micToggle.classList.remove('bg-red-600');
+            }
+        }
+
+        function toggleParticipantsPanel() {
+            if (participantsPanel.classList.contains('hidden')) {
+                showParticipantsPanel();
+            } else {
+                hideParticipantsPanel();
+            }
+        }
+
+        function showParticipantsPanel() {
+            participantsPanel.classList.remove('hidden');
+            participantsPanel.style.width = '256px';
+        }
+
+        function hideParticipantsPanel() {
+            participantsPanel.classList.add('hidden');
+        }
+
+        function startTimer() {
+            clearInterval(timerInterval);
+            elapsedTime = 0;
+            updateTimerDisplay();
+            
+            timerInterval = setInterval(() => {
+                elapsedTime++;
+                updateTimerDisplay();
+            }, 1000);
+        }
+
+        function updateTimerDisplay() {
+            const hours = Math.floor(elapsedTime / 3600);
+            const minutes = Math.floor((elapsedTime % 3600) / 60);
+            const seconds = elapsedTime % 60;
+            
+            timerDisplay.textContent = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+
+        function showCooldownMessage() {
+            const cooldownMessage = document.createElement('div');
+            cooldownMessage.className = 'cooldown-message';
+            cooldownMessage.textContent = 'Please wait before sending another message';
+            messagesContainer.appendChild(cooldownMessage);
+            
+            // Remove after delay
+            setTimeout(() => {
+                if (cooldownMessage.parentNode) {
+                    cooldownMessage.parentNode.removeChild(cooldownMessage);
+                }
+            }, 2000);
+        }
+
+        function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message) return;
+            
+            // Check cooldown period
+            const currentTime = Date.now();
+            if (currentTime - lastSentMessageTime < cooldownPeriod) {
+                showCooldownMessage();
+                return;
+            }
+            
+            lastSentMessageTime = currentTime;
+            
+            const timestamp = new Date();
+            const messageElement = document.createElement('div');
+            messageElement.className = 'message-item flex items-start space-x-2';
+            messageElement.innerHTML = `
+                <div class="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0 mt-1">
+                    <i class="fas fa-user text-sm"></i>
+                </div>
+                <div class="flex-1">
+                    <div class="flex items-baseline space-x-2">
+                        <span class="font-medium">${userName}</span>
+                        <span class="text-xs text-gray-400">${timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                    </div>
+                    <p class="mt-1">${message}</p>
+                </div>
+            `;
+            
+            messagesContainer.appendChild(messageElement);
+            messageInput.value = '';
+            
+            // Scroll to bottom
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            
+            // Update unread count
+            if (unreadMessages > 0) {
+                unreadMessages = 0;
+                unreadCount.classList.add('hidden');
+                unreadCount.textContent = '0';
+            }
+        }
+
+        function leaveCallHandler() {
+            if (confirm('Are you sure you want to leave the call?')) {
+                clearInterval(timerInterval);
+                welcomeModal.classList.remove('hidden');
+                videoGrid.innerHTML = '<div class="video-container"><div class="video-placeholder"><i class="fas fa-user text-3xl"></i><div class="font-medium">You</div><div class="text-sm text-gray-400">Camera Off</div></div></div>';
+                messagesContainer.innerHTML = '<div class="text-center text-gray-500 text-sm py-4">No messages yet. Type something to start the conversation!</div>';
+                participantList.innerHTML = '';
+                currentRoomId = '';
+                roomIdDisplay.textContent = '-';
+                timerDisplay.textContent = '00:00:00';
+                unreadMessages = 0;
+                unreadCount.classList.add('hidden');
+                unreadCount.textContent = '0';
+                cameraEnabled = true;
+                screenSharingActive = false;
+                sharingUser = null;
+                updateShareButton();
+            }
+        }
+
+        // Screen Sharing Functionality
+        async function toggleScreenShare() {
+            if (screenSharingActive) {
+                stopScreenShare();
+            } else {
+                await startScreenShare();
+            }
+        }
+
+        async function startScreenShare() {
+            try {
+                screenShareStream = await navigator.mediaDevices.getDisplayMedia({
+                    video: {
+                        cursor: "always"
+                    },
+                    audio: false
+                });
+
+                // Update UI to indicate screen sharing is active
+                screenSharingActive = true;
+                sharingUser = userName;
+                updateShareButton();
+
+                // Create screen sharing video element
+                const screenVideoElement = document.createElement('video');
+                screenVideoElement.srcObject = screenShareStream;
+                screenVideoElement.autoplay = true;
+                screenVideoElement.playsInline = true;
+                screenVideoElement.className = 'local-video';
+                
+                // Create indicator for screen sharing
+                const indicator = document.createElement('div');
+                indicator.className = 'screen-share-indicator';
+                indicator.innerHTML = '<i class="fas fa-circle"></i> Sharing Screen';
+                
+                // Replace local video container with screen sharing
+                const videoContainer = document.querySelector('.video-container');
+                videoContainer.innerHTML = '';
+                videoContainer.appendChild(screenVideoElement);
+                videoContainer.appendChild(indicator);
+                videoContainer.classList.add('screen-sharing');
+                
+                // Add badge to show who's sharing
+                const badge = document.createElement('div');
+                badge.className = 'participant-badge';
+                badge.textContent = 'Screen Sharing';
+                videoContainer.appendChild(badge);
+                
+                // Send notification to participants
+                addSystemMessage(`${userName} started sharing their screen.`);
+                
+                // Handle when screen sharing stops
+                screenShareStream.getVideoTracks()[0].onended = () => {
+                    stopScreenShare();
+                };
+
+            } catch (err) {
+                console.error("Error starting screen share:", err);
+                alert("Could not start screen sharing. Please check browser permissions.");
+            }
+        }
+
+        function stopScreenShare() {
+            if (!screenSharingActive) return;
+
+            // Stop all tracks
+            if (screenShareStream) {
+                screenShareStream.getTracks().forEach(track => track.stop());
+                screenShareStream = null;
+            }
+
+            // Reset to normal view
+            screenSharingActive = false;
+            sharingUser = null;
+            updateShareButton();
+
+            // Restore local video
+            const videoContainer = document.querySelector('.video-container');
+            videoContainer.innerHTML = '';
+            videoContainer.classList.remove('screen-sharing');
+            
+            // Revert to local camera view
+            if (localStream) {
+                const localVideoElement = document.createElement('video');
+                localVideoElement.srcObject = localStream;
+                localVideoElement.autoplay = true;
+                localVideoElement.muted = true;
+                localVideoElement.playsInline = true;
+                localVideoElement.className = 'local-video';
+                videoContainer.appendChild(localVideoElement);
+                
+                // Restore normal placeholder
+                localVideoPlaceholder.innerHTML = `
+                    <i class="fas fa-user text-3xl"></i>
+                    <div class="font-medium">You</div>
+                    <div class="text-sm text-gray-400">Camera On</div>
+                `;
+            }
+
+            // Send notification to participants
+            addSystemMessage(`${userName} stopped sharing their screen.`);
+        }
+
+        function updateShareButton() {
+            const icon = shareButton.querySelector('i');
+            if (screenSharingActive) {
+                icon.classList.remove('fa-desktop');
+                icon.classList.add('fa-stop');
+                shareButton.classList.add('bg-red-600');
+                shareButton.title = 'Stop Sharing Screen';
+            } else {
+                icon.classList.remove('fa-stop');
+                icon.classList.add('fa-desktop');
+                shareButton.classList.remove('bg-red-600');
+                shareButton.title = 'Share Screen';
+            }
+        }
+
+        function addSystemMessage(message) {
+            const timestamp = new Date();
+            const messageElement = document.createElement('div');
+            messageElement.className = 'message-item flex items-start space-x-2 text-yellow-400';
+            messageElement.innerHTML = `
+                <div class="w-8 h-8 rounded-full bg-yellow-500 flex items-center justify-center flex-shrink-0 mt-1">
+                    <i class="fas fa-info-circle text-sm"></i>
+                </div>
+                <div class="flex-1">
+                    <div class="flex items-baseline space-x-2">
+                        <span class="font-medium">System</span>
+                        <span class="text-xs text-gray-400">${timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                    </div>
+                    <p class="mt-1">${message}</p>
+                </div>
+            `;
+            
+            messagesContainer.appendChild(messageElement);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // Simulate incoming messages for demo purposes
+        setInterval(() => {
+            if (currentRoomId && Math.random() > 0.7) {
+                const participants = ['Alice', 'Bob', 'Charlie', 'David'];
+                const randomName = participants[Math.floor(Math.random() * participants.length)];
+                const messages = ['Hey everyone!', 'How are you doing?', 'Meeting in 5 minutes?', 'Check out this link!'];
+                const randomMessage = messages[Math.floor(Math.random() * messages.length)];
+                
+                if (randomName !== userName) {
+                    unreadMessages++;
+                    unreadCount.textContent = unreadMessages;
+                    unreadCount.classList.remove('hidden');
+                    
+                    const timestamp = new Date();
+                    const messageElement = document.createElement('div');
+                    messageElement.className = 'message-item flex items-start space-x-2';
+                    messageElement.innerHTML = `
+                        <div class="w-8 h-8 rounded-full bg-purple-500 flex items-center justify-center flex-shrink-0 mt-1">
+                            <i class="fas fa-user text-sm"></i>
+                        </div>
+                        <div class="flex-1">
+                            <div class="flex items-baseline space-x-2">
+                                <span class="font-medium">${randomName}</span>
+                                <span class="text-xs text-gray-400">${timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                            </div>
+                            <p class="mt-1">${randomMessage}</p>
+                        </div>
+                    `;
+                    
+                    messagesContainer.appendChild(messageElement);
+                    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                }
+            }
+        }, 5000);
+
+        // Add more participants occasionally
+        setInterval(() => {
+            if (currentRoomId && Math.random() > 0.8) {
+                const participants = ['Eve', 'Frank', 'Grace', 'Henry'];
+                const randomName = participants[Math.floor(Math.random() * participants.length)];
+                addParticipant(randomName, false, true);
+            }
+        }, 10000);
+    </script>
+</body>
+</html>
