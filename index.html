@@ -254,6 +254,35 @@
             justify-content: center;
             font-weight: bold;
             cursor: pointer;
+            position: relative;
+        }
+
+        .user-avatar img {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        .edit-profile-btn {
+            position: absolute;
+            bottom: -5px;
+            right: -5px;
+            background: var(--accent);
+            border: 2px solid var(--muted);
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .edit-profile-btn:hover {
+            background: var(--accent-hover);
+            transform: scale(1.1);
         }
 
         .sidebar {
@@ -323,6 +352,13 @@
             align-items: center;
             justify-content: center;
             font-weight: bold;
+        }
+
+        .friend-avatar img {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            object-fit: cover;
         }
 
         .friend-info {
@@ -669,6 +705,77 @@
             justify-content: flex-end;
         }
 
+        /* Profile Settings Modal */
+        .profile-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .profile-modal-content {
+            background: var(--muted);
+            border-radius: 12px;
+            padding: 2rem;
+            width: 100%;
+            max-width: 500px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            position: relative;
+        }
+
+        .profile-form {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .profile-picture-upload {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .profile-picture-preview {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: var(--accent);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3rem;
+            overflow: hidden;
+            border: 2px solid var(--accent);
+        }
+
+        .profile-picture-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .upload-btn {
+            padding: 0.5rem 1rem;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .upload-btn:hover {
+            background: var(--accent-hover);
+        }
+
         /* Responsive adjustments */
         @media (max-width: 768px) {
             .sidebar {
@@ -857,6 +964,38 @@
         </div>
     </div>
 
+    <!-- Profile Settings Modal -->
+    <div class="profile-modal" id="profileModal">
+        <div class="profile-modal-content">
+            <button class="close-modal" onclick="closeModal('profileModal')">&times;</button>
+            <div class="modal-header">
+                <h2>Profile Settings</h2>
+            </div>
+            <div class="modal-body">
+                <form class="profile-form" id="profileForm">
+                    <div class="profile-picture-upload">
+                        <div class="profile-picture-preview" id="profilePicturePreview">
+                            <span id="profilePictureInitial">U</span>
+                        </div>
+                        <input type="file" id="profilePictureInput" accept="image/*" style="display: none;" onchange="handleProfilePictureUpload(event)">
+                        <button type="button" class="upload-btn" onclick="document.getElementById('profilePictureInput').click()">
+                            <i class="fas fa-upload"></i> Upload Picture
+                        </button>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="displayName">Display Name</label>
+                        <input type="text" id="displayName" class="form-control" placeholder="Enter display name">
+                        <div id="displayNameError" class="error-message"></div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="saveProfileSettings()">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Home Screen -->
     <div class="home-container" id="homeScreen">
         <div class="navbar">
@@ -950,6 +1089,10 @@
         let mediaStream = null;
         let currentChat = null;
         let chatHistory = {};
+        let userProfile = {
+            displayName: '',
+            profilePicture: null
+        };
         
         // Updated user database with allowed users only
         const usersDatabase = {
@@ -961,6 +1104,12 @@
         // Initialize chat history storage
         if (localStorage.getItem('chatHistory')) {
             chatHistory = JSON.parse(localStorage.getItem('chatHistory'));
+        }
+
+        // Initialize user profile storage
+        if (localStorage.getItem('userProfiles')) {
+            const profiles = JSON.parse(localStorage.getItem('userProfiles'));
+            userProfile = profiles[currentUser] || userProfile;
         }
 
         // Toggle password visibility
@@ -999,7 +1148,7 @@
             // Check credentials
             if (usersDatabase[username] && usersDatabase[username] === password) {
                 currentUser = username;
-                document.getElementById('currentUserAvatar').textContent = username.charAt(0).toUpperCase();
+                document.getElementById('currentUserAvatar').innerHTML = `<span>${username.charAt(0).toUpperCase()}</span>`;
                 showHome();
             } else {
                 document.getElementById('loginPasswordError').textContent = 'Invalid username or password';
@@ -1069,19 +1218,25 @@
             document.getElementById('homeScreen').style.display = 'flex';
             loadFriendsList();
             loadChatHistory();
+            loadUserProfile();
         }
 
         // Open modal
         function openModal(modalId) {
             document.getElementById(modalId).style.display = 'flex';
+            if (modalId === 'profileModal') {
+                loadProfileForm();
+            }
         }
 
         // Close modal
         function closeModal(modalId) {
             document.getElementById(modalId).style.display = 'none';
             // Clear form fields
-            document.getElementById('friendUsername').value = '';
-            document.getElementById('friendUsernameError').style.display = 'none';
+            if (modalId === 'addFriendModal') {
+                document.getElementById('friendUsername').value = '';
+                document.getElementById('friendUsernameError').style.display = 'none';
+            }
         }
 
         // Load friends list
@@ -1194,8 +1349,23 @@
                 messagesContainer.appendChild(messageElement);
             });
             
+            // Add timestamp to messages
+            addTimestampToMessages();
+            
             // Scroll to bottom
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // Add timestamps to messages
+        function addTimestampToMessages() {
+            const messages = document.querySelectorAll('.message');
+            messages.forEach(message => {
+                const timestamp = document.createElement('div');
+                timestamp.className = 'message-info';
+                const now = new Date();
+                timestamp.textContent = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                message.appendChild(timestamp);
+            });
         }
 
         // Send message
@@ -1208,6 +1378,14 @@
                 messageElement.className = 'message sent';
                 messageElement.textContent = message;
                 messagesContainer.appendChild(messageElement);
+                
+                // Add timestamp
+                const timestamp = document.createElement('div');
+                timestamp.className = 'message-info';
+                const now = new Date();
+                timestamp.textContent = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                messageElement.appendChild(timestamp);
+                
                 input.value = '';
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
                 
@@ -1333,6 +1511,80 @@
             alert(`Successfully added ${friendUsername} as a friend!`);
         }
 
+        // Load profile form with current data
+        function loadProfileForm() {
+            const displayNameInput = document.getElementById('displayName');
+            displayNameInput.value = userProfile.displayName || currentUser;
+            const preview = document.getElementById('profilePicturePreview');
+            if (userProfile.profilePicture) {
+                preview.innerHTML = `<img src="${userProfile.profilePicture}" alt="Profile Picture">`;
+            } else {
+                preview.innerHTML = `<span>${currentUser.charAt(0).toUpperCase()}</span>`;
+            }
+        }
+
+        // Handle profile picture upload
+        function handleProfilePictureUpload(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    userProfile.profilePicture = e.target.result;
+                    const preview = document.getElementById('profilePicturePreview');
+                    preview.innerHTML = `<img src="${userProfile.profilePicture}" alt="Profile Picture">`;
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        // Save profile settings
+        function saveProfileSettings() {
+            const displayName = document.getElementById('displayName').value.trim();
+            
+            // Validation
+            if (displayName.length < 1) {
+                document.getElementById('displayNameError').textContent = 'Display name is required';
+                document.getElementById('displayNameError').style.display = 'block';
+                return;
+            }
+            
+            userProfile.displayName = displayName;
+            
+            // Save to localStorage
+            const profiles = JSON.parse(localStorage.getItem('userProfiles') || '{}');
+            profiles[currentUser] = userProfile;
+            localStorage.setItem('userProfiles', JSON.stringify(profiles));
+            
+            // Update UI
+            updateCurrentUserAvatar();
+            closeModal('profileModal');
+            alert('Profile updated successfully!');
+        }
+
+        // Load user profile
+        function loadUserProfile() {
+            if (currentUser) {
+                const profiles = JSON.parse(localStorage.getItem('userProfiles') || '{}');
+                userProfile = profiles[currentUser] || userProfile;
+                updateCurrentUserAvatar();
+            }
+        }
+
+        // Update current user avatar display
+        function updateCurrentUserAvatar() {
+            const avatarElement = document.getElementById('currentUserAvatar');
+            const displayName = userProfile.displayName || currentUser;
+            
+            if (userProfile.profilePicture) {
+                avatarElement.innerHTML = `<img src="${userProfile.profilePicture}" alt="Profile Picture">`;
+            } else {
+                avatarElement.innerHTML = `<span>${displayName.charAt(0).toUpperCase()}</span>`;
+            }
+            
+            // Add edit button
+            avatarElement.innerHTML += '<div class="edit-profile-btn" onclick="openModal(\'profileModal\')"><i class="fas fa-edit"></i></div>';
+        }
+
         // Initialize
         window.onload = function() {
             // Setup video elements for better appearance
@@ -1347,6 +1599,13 @@
                 if (event.key === 'Enter' && !event.shiftKey) {
                     event.preventDefault();
                     sendMessage();
+                }
+            });
+            
+            // Add click handler to user avatar for profile editing
+            document.getElementById('currentUserAvatar').addEventListener('click', function() {
+                if (currentUser) {
+                    openModal('profileModal');
                 }
             });
         };
