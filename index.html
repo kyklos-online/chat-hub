@@ -3,37 +3,46 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ChatApp - Discord Clone</title>
-    <!-- React and Babel CDNs for instant running -->
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <title>ChatApp - Servers & DMs</title>
+    <script src="https://unpkg.com"></script>
+    <script src="https://unpkg.com"></script>
+    <script src="https://unpkg.com"></script>
     <style>
         body { margin: 0; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #36393f; color: white; overflow: hidden; }
         .app-container { display: flex; height: 100vh; }
         
-        /* Sidebar Styles */
+        /* Left Sidebar: Servers */
         .sidebar { width: 72px; background-color: #202225; display: flex; flex-direction: column; align-items: center; padding-top: 12px; gap: 8px; }
-        .server-icon { width: 48px; height: 48px; border-radius: 50%; background-color: #36393f; color: #dcddde; display: flex; justify-content: center; align-items: center; cursor: pointer; transition: all 0.2s; font-weight: bold; }
+        .server-icon { width: 48px; height: 48px; border-radius: 50%; background-color: #36393f; color: #dcddde; display: flex; justify-content: center; align-items: center; cursor: pointer; transition: all 0.2s; font-weight: bold; overflow: hidden; }
         .server-icon:hover, .server-icon.active { border-radius: 16px; background-color: #5865f2; color: white; }
-        .add-server { background-color: #3ba55d !important; color: white !important; }
+        .dm-home { background-color: #36393f; margin-bottom: 8px; font-size: 20px; }
+
+        /* Middle Sidebar: Channels/Friends */
+        .sub-sidebar { width: 240px; background-color: #2f3136; display: flex; flex-direction: column; padding: 12px 8px; }
+        .sub-header { padding: 0 8px 12px; border-bottom: 1px solid #26272d; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+        .list-item { padding: 8px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 10px; margin-bottom: 2px; }
+        .list-item:hover, .list-item.active { background-color: #393c43; }
+        .list-item.active { color: white; background-color: #42464d; }
 
         /* Chat Content */
         .main-content { flex: 1; display: flex; flex-direction: column; }
-        .header { height: 48px; padding: 0 16px; display: flex; align-items: center; border-bottom: 1px solid #26272d; font-weight: bold; font-size: 16px; }
-        .chat-area { flex: 1; padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
-        .message { display: flex; flex-direction: column; }
-        .message .user { font-weight: bold; color: #fff; font-size: 14px; }
-        .message .text { color: #dcddde; font-size: 15px; }
+        .header { height: 48px; padding: 0 16px; display: flex; align-items: center; border-bottom: 1px solid #26272d; font-weight: bold; }
+        .chat-area { flex: 1; padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
         
-        /* Input Area */
+        .message-row { display: flex; align-items: flex-start; gap: 12px; }
+        .avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; background: #4f545c; }
+        .avatar-sm { width: 32px; height: 32px; border-radius: 50%; }
+        .message-content { display: flex; flex-direction: column; }
+        .message-user { font-weight: bold; color: #fff; font-size: 14px; }
+        .message-text { color: #dcddde; font-size: 15px; }
+        
         .input-container { padding: 16px; }
-        .message-input { width: 100%; padding: 12px; border-radius: 8px; border: none; background-color: #40444b; color: white; outline: none; }
+        .message-input { width: 100%; padding: 12px; border-radius: 8px; border: none; background-color: #40444b; color: white; outline: none; box-sizing: border-box; }
 
         /* Auth Screen */
         .auth-overlay { position: fixed; inset: 0; background: #36393f; display: flex; justify-content: center; align-items: center; z-index: 100; }
-        .auth-card { background: #2f3136; padding: 32px; border-radius: 8px; width: 400px; box-shadow: 0 8px 16px rgba(0,0,0,0.2); }
-        .auth-input { width: 100%; padding: 10px; margin: 12px 0; border-radius: 3px; border: none; background: #202225; color: white; box-sizing: border-box; }
+        .auth-card { background: #2f3136; padding: 32px; border-radius: 8px; width: 400px; }
+        .auth-input { width: 100%; padding: 10px; margin: 8px 0 16px 0; border-radius: 3px; border: none; background: #202225; color: white; box-sizing: border-box; }
         .auth-btn { width: 100%; padding: 12px; background: #5865f2; border: none; color: white; border-radius: 3px; cursor: pointer; font-weight: bold; }
     </style>
 </head>
@@ -42,97 +51,121 @@
 
     <script type="text/babel">
         const { useState } = React;
+        const DEFAULT_PFP = "https://imgur.com";
 
         function App() {
             const [user, setUser] = useState(null);
-            const [currentServer, setCurrentServer] = useState('General');
+            const [view, setView] = useState('server'); // 'server' or 'dm'
+            const [activeId, setActiveId] = useState('General');
             const [msgInput, setMsgInput] = useState('');
-            const [authMode, setAuthMode] = useState('login');
             const [tempUser, setTempUser] = useState('');
+            const [tempPfp, setTempPfp] = useState('');
 
-            // App State: List of servers and their message history
-            const [data, setData] = useState({
-                servers: ['General', 'Gaming', 'Dev'],
-                chatHistory: {
-                    'General': [{ user: 'System', text: 'Welcome to the general chat!' }],
-                    'Gaming': [{ user: 'System', text: 'Talk about games here.' }],
-                    'Dev': [{ user: 'System', text: 'Show us your code.' }]
-                }
+            const [friends, setFriends] = useState([]);
+            const [servers, setServers] = useState(['General', 'Gaming']);
+            const [chatData, setChatData] = useState({
+                'General': [{ user: 'System', pfp: DEFAULT_PFP, text: 'Welcome to General Chat!' }],
+                'Gaming': []
             });
 
             const handleLogin = (e) => {
                 e.preventDefault();
-                if (tempUser.trim()) setUser(tempUser);
+                if (tempUser.trim()) setUser({ name: tempUser, pfp: tempPfp.trim() || DEFAULT_PFP });
             };
 
             const sendMessage = (e) => {
                 if (e.key === 'Enter' && msgInput.trim()) {
-                    const newMsg = { user: user, text: msgInput };
-                    setData(prev => ({
+                    const newMsg = { user: user.name, pfp: user.pfp, text: msgInput };
+                    setChatData(prev => ({
                         ...prev,
-                        chatHistory: {
-                            ...prev.chatHistory,
-                            [currentServer]: [...prev.chatHistory[currentServer], newMsg]
-                        }
+                        [activeId]: [...(prev[activeId] || []), newMsg]
                     }));
                     setMsgInput('');
                 }
             };
 
-            const addNewServer = () => {
-                const sName = prompt("Enter new server name:");
-                if (sName && !data.servers.includes(sName)) {
-                    setData(prev => ({
-                        servers: [...prev.servers, sName],
-                        chatHistory: { ...prev.chatHistory, [sName]: [] }
-                    }));
+            const addFriend = () => {
+                const name = prompt("Enter username to add:");
+                if (name && !friends.find(f => f.name === name)) {
+                    const newFriend = { name, pfp: DEFAULT_PFP };
+                    setFriends([...friends, newFriend]);
+                    if (!chatData[name]) setChatData(prev => ({ ...prev, [name]: [] }));
                 }
             };
 
-            // 1. Auth Page
+            const addServer = () => {
+                const name = prompt("Enter server name:");
+                if (name && !servers.includes(name)) {
+                    setServers([...servers, name]);
+                    setChatData(prev => ({ ...prev, [name]: [] }));
+                }
+            };
+
             if (!user) {
                 return (
                     <div className="auth-overlay">
                         <div className="auth-card">
-                            <h2 style={{textAlign: 'center'}}>{authMode === 'login' ? 'Welcome back!' : 'Create an account'}</h2>
+                            <h2 style={{textAlign:'center'}}>Login</h2>
                             <form onSubmit={handleLogin}>
-                                <label style={{fontSize: '12px', color: '#b9bbbe', textTransform: 'uppercase'}}>Username</label>
-                                <input className="auth-input" value={tempUser} onChange={(e) => setTempUser(e.target.value)} required />
-                                <label style={{fontSize: '12px', color: '#b9bbbe', textTransform: 'uppercase'}}>Password</label>
-                                <input className="auth-input" type="password" required />
-                                <button className="auth-btn" type="submit">{authMode === 'login' ? 'Login' : 'Continue'}</button>
+                                <div style={{fontSize:'12px', color:'#b9bbbe'}}>USERNAME</div>
+                                <input className="auth-input" value={tempUser} onChange={e => setTempUser(e.target.value)} required />
+                                <div style={{fontSize:'12px', color:'#b9bbbe'}}>PFP URL (OPTIONAL)</div>
+                                <input className="auth-input" value={tempPfp} onChange={e => setTempPfp(e.target.value)} />
+                                <button className="auth-btn" type="submit">Join</button>
                             </form>
-                            <p onClick={() => setAuthMode(authMode === 'login' ? 'reg' : 'login')} style={{color: '#00aff4', cursor: 'pointer', fontSize: '14px', marginTop: '15px'}}>
-                                {authMode === 'login' ? 'Need an account? Register' : 'Already have an account?'}
-                            </p>
                         </div>
                     </div>
                 );
             }
 
-            // 2. Main App Page
             return (
                 <div className="app-container">
+                    {/* Leftmost: Server List */}
                     <div className="sidebar">
-                        {data.servers.map(s => (
-                            <div 
-                                key={s} 
-                                className={`server-icon ${currentServer === s ? 'active' : ''}`}
-                                onClick={() => setCurrentServer(s)}
-                            >
-                                {s.substring(0, 2).toUpperCase()}
+                        <div className={`server-icon dm-home ${view === 'dm' ? 'active' : ''}`} onClick={() => {setView('dm'); setActiveId(friends[0]?.name || '');}}>
+                            DM
+                        </div>
+                        <div style={{width:'32px', height:'2px', background:'#4f545c', margin:'4px 0'}} />
+                        {servers.map(s => (
+                            <div key={s} className={`server-icon ${view === 'server' && activeId === s ? 'active' : ''}`} onClick={() => {setView('server'); setActiveId(s)}}>
+                                {s.substring(0,2).toUpperCase()}
                             </div>
                         ))}
-                        <div className="server-icon add-server" onClick={addNewServer}>+</div>
+                        <div className="server-icon" style={{color:'#3ba55d'}} onClick={addServer}>+</div>
                     </div>
 
+                    {/* Middle: Friends or Channels */}
+                    <div className="sub-sidebar">
+                        <div className="sub-header">
+                            <span style={{fontSize:'14px'}}>{view === 'server' ? 'CHANNELS' : 'DIRECT MESSAGES'}</span>
+                            {view === 'dm' && <button onClick={addFriend} style={{background:'none', border:'none', color:'#3ba55d', cursor:'pointer', fontWeight:'bold'}}>+</button>}
+                        </div>
+                        {view === 'server' ? (
+                            servers.map(s => (
+                                <div key={s} className={`list-item ${activeId === s ? 'active' : ''}`} onClick={() => setActiveId(s)}>
+                                    # {s.toLowerCase()}
+                                </div>
+                            ))
+                        ) : (
+                            friends.map(f => (
+                                <div key={f.name} className={`list-item ${activeId === f.name ? 'active' : ''}`} onClick={() => setActiveId(f.name)}>
+                                    <img src={f.pfp} className="avatar-sm" /> {f.name}
+                                </div>
+                            ))
+                        )}
+                    </div>
+
+                    {/* Main: Chat */}
                     <div className="main-content">
-                        <div className="header"># {currentServer}</div>
+                        <div className="header">@ {activeId || "Select a Chat"}</div>
                         <div className="chat-area">
-                            {data.chatHistory[currentServer].map((m, i) => (
-                                <div key={i} className="message">
-                                    <span className="user">{m.user}</span>
-                                    <span className="text">{m.text}</span>
+                            {(chatData[activeId] || []).map((m, i) => (
+                                <div key={i} className="message-row">
+                                    <img className="avatar" src={m.pfp} onError={e => e.target.src=DEFAULT_PFP} />
+                                    <div className="message-content">
+                                        <span className="message-user">{m.user}</span>
+                                        <span className="message-text">{m.text}</span>
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -140,9 +173,10 @@
                             <input 
                                 className="message-input" 
                                 value={msgInput}
-                                onChange={(e) => setMsgInput(e.target.value)}
+                                onChange={e => setMsgInput(e.target.value)}
                                 onKeyDown={sendMessage}
-                                placeholder={`Message #${currentServer}`} 
+                                placeholder={`Message ${activeId ? activeId : '...'}`} 
+                                disabled={!activeId}
                             />
                         </div>
                     </div>
